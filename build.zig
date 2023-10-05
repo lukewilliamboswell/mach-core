@@ -103,6 +103,7 @@ pub const App = struct {
             res_dirs: ?[]const []const u8 = null,
             watch_paths: ?[]const []const u8 = null,
             mach_core_mod: ?*std.Build.Module = null,
+            roc_app_dylib_path: ?[]const u8 = null,
         },
     ) !App {
         const target = (try std.zig.system.NativeTargetInfo.detect(options.target)).target;
@@ -149,6 +150,11 @@ pub const App = struct {
                 });
                 // TODO(core): figure out why we need to disable LTO: https://github.com/hexops/mach/issues/597
                 exe.want_lto = false;
+
+                if (options.roc_app_dylib_path) |roc_app_dylib_path| {
+                    exe.addObjectFile(.{ .path = roc_app_dylib_path });
+                }
+
                 break :blk exe;
             }
         };
