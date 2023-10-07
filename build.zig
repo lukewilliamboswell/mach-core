@@ -103,7 +103,7 @@ pub const App = struct {
             res_dirs: ?[]const []const u8 = null,
             watch_paths: ?[]const []const u8 = null,
             mach_core_mod: ?*std.Build.Module = null,
-            roc_app_dylib_path: ?[]const u8 = null,
+            compile_static_lib: bool = false,
         },
     ) !App {
         const target = (try std.zig.system.NativeTargetInfo.detect(options.target)).target;
@@ -128,11 +128,8 @@ pub const App = struct {
         });
 
         const compile = blk: {
-            if (platform == .web) {
-                // wasm libraries should go into zig-out/www/
-                app_builder.lib_dir = app_builder.fmt("{s}/www", .{app_builder.install_path});
-
-                const lib = app_builder.addSharedLibrary(.{
+            if (options.compile_static_lib) {
+                const lib = app_builder.addStaticLibrary(.{
                     .name = options.name,
                     .root_source_file = .{ .path = options.custom_entrypoint orelse sdkPath("/src/platform/wasm/main.zig") },
                     .target = options.target,
@@ -142,20 +139,35 @@ pub const App = struct {
 
                 break :blk lib;
             } else {
-                const exe = app_builder.addExecutable(.{
-                    .name = options.name,
-                    .root_source_file = .{ .path = options.custom_entrypoint orelse sdkPath("/src/platform/native/main.zig") },
-                    .target = options.target,
-                    .optimize = options.optimize,
-                });
-                // TODO(core): figure out why we need to disable LTO: https://github.com/hexops/mach/issues/597
-                exe.want_lto = false;
+                if (platform == .web) {
+                    // wasm libraries should go into zig-out/www/
+                    app_builder.lib_dir = app_builder.fmt("{s}/www", .{app_builder.install_path});
 
-                if (options.roc_app_dylib_path) |roc_app_dylib_path| {
-                    exe.addObjectFile(.{ .path = roc_app_dylib_path });
+                    const lib = app_builder.addSharedLibrary(.{
+                        .name = options.name,
+                        .root_source_file = .{ .path = options.custom_entrypoint orelse sdkPath("/src/platform/wasm/main.zig") },
+                        .target = options.target,
+                        .optimize = options.optimize,
+                    });
+                    lib.rdynamic = true;
+
+                    break :blk lib;
+                } else {
+                    const exe = app_builder.addExecutable(.{
+                        .name = options.name,
+                        .root_source_file = .{ .path = options.custom_entrypoint orelse sdkPath("/src/platform/native/main.zig") },
+                        .target = options.target,
+                        .optimize = options.optimize,
+                    });
+                    // TODO(core): figure out why we need to disable LTO: https://github.com/hexops/mach/issues/597
+                    exe.want_lto = false;
+
+                    if (options.roc_app_dylib_path) |roc_app_dylib_path| {
+                        exe.addObjectFile(.{ .path = roc_app_dylib_path });
+                    }
+
+                    break :blk exe;
                 }
-
-                break :blk exe;
             }
         };
 
@@ -193,18 +205,32 @@ pub const App = struct {
             link(core_builder, compile);
         }
 
-        const run = app_builder.addRunArtifact(compile);
-        run.step.dependOn(&install.step);
-        return .{
-            .b = app_builder,
-            .compile = compile,
-            .install = install,
-            .run = run,
-            .name = options.name,
-            .platform = platform,
-            .res_dirs = options.res_dirs,
-            .watch_paths = options.watch_paths,
-        };
+        if (options.compile_static_lib) {
+            return .{
+                .b = app_builder,
+                .compile = compile,
+                .install = install,
+                .run = null,
+                .name = options.name,
+                .platform = platform,
+                .res_dirs = options.res_dirs,
+                .watch_paths = options.watch_paths,
+            };
+        } else {
+            const run = app_builder.addRunArtifact(compile);
+            run.step.dependOn(&install.step);
+
+            return .{
+                .b = app_builder,
+                .compile = compile,
+                .install = install,
+                .run = run,
+                .name = options.name,
+                .platform = platform,
+                .res_dirs = options.res_dirs,
+                .watch_paths = options.watch_paths,
+            };
+        }
     }
 };
 
