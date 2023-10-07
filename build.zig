@@ -138,36 +138,30 @@ pub const App = struct {
                 lib.rdynamic = true;
 
                 break :blk lib;
+            } else if (platform == .web) {
+                // wasm libraries should go into zig-out/www/
+                app_builder.lib_dir = app_builder.fmt("{s}/www", .{app_builder.install_path});
+
+                const lib = app_builder.addSharedLibrary(.{
+                    .name = options.name,
+                    .root_source_file = .{ .path = options.custom_entrypoint orelse sdkPath("/src/platform/wasm/main.zig") },
+                    .target = options.target,
+                    .optimize = options.optimize,
+                });
+                lib.rdynamic = true;
+
+                break :blk lib;
             } else {
-                if (platform == .web) {
-                    // wasm libraries should go into zig-out/www/
-                    app_builder.lib_dir = app_builder.fmt("{s}/www", .{app_builder.install_path});
+                const exe = app_builder.addExecutable(.{
+                    .name = options.name,
+                    .root_source_file = .{ .path = options.custom_entrypoint orelse sdkPath("/src/platform/native/main.zig") },
+                    .target = options.target,
+                    .optimize = options.optimize,
+                });
+                // TODO(core): figure out why we need to disable LTO: https://github.com/hexops/mach/issues/597
+                exe.want_lto = false;
 
-                    const lib = app_builder.addSharedLibrary(.{
-                        .name = options.name,
-                        .root_source_file = .{ .path = options.custom_entrypoint orelse sdkPath("/src/platform/wasm/main.zig") },
-                        .target = options.target,
-                        .optimize = options.optimize,
-                    });
-                    lib.rdynamic = true;
-
-                    break :blk lib;
-                } else {
-                    const exe = app_builder.addExecutable(.{
-                        .name = options.name,
-                        .root_source_file = .{ .path = options.custom_entrypoint orelse sdkPath("/src/platform/native/main.zig") },
-                        .target = options.target,
-                        .optimize = options.optimize,
-                    });
-                    // TODO(core): figure out why we need to disable LTO: https://github.com/hexops/mach/issues/597
-                    exe.want_lto = false;
-
-                    // if (options.roc_app_dylib_path) |roc_app_dylib_path| {
-                    //     exe.addObjectFile(.{ .path = roc_app_dylib_path });
-                    // }
-
-                    break :blk exe;
-                }
+                break :blk exe;
             }
         };
 
@@ -205,32 +199,22 @@ pub const App = struct {
             link(core_builder, compile);
         }
 
-        if (options.compile_static_lib) {
-            return .{
-                .b = app_builder,
-                .compile = compile,
-                .install = install,
-                .run = null,
-                .name = options.name,
-                .platform = platform,
-                .res_dirs = options.res_dirs,
-                .watch_paths = options.watch_paths,
-            };
-        } else {
-            const run = app_builder.addRunArtifact(compile);
-            run.step.dependOn(&install.step);
+        return .{
+            .b = app_builder,
+            .compile = compile,
+            .install = install,
+            .run = undefined,
+            .name = options.name,
+            .platform = platform,
+            .res_dirs = options.res_dirs,
+            .watch_paths = options.watch_paths,
+        };
+    }
 
-            return .{
-                .b = app_builder,
-                .compile = compile,
-                .install = install,
-                .run = run,
-                .name = options.name,
-                .platform = platform,
-                .res_dirs = options.res_dirs,
-                .watch_paths = options.watch_paths,
-            };
-        }
+    pub fn run(app_builder: *std.Build, compile: *std.build.Step.Compile, install: *std.build.Step.InstallArtifact) *std.build.Step.Run {
+        const run_step = app_builder.addRunArtifact(compile);
+        run_step.step.dependOn(&install.step);
+        return run_step;
     }
 };
 
