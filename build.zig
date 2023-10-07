@@ -162,9 +162,9 @@ pub const App = struct {
                     // TODO(core): figure out why we need to disable LTO: https://github.com/hexops/mach/issues/597
                     exe.want_lto = false;
 
-                    if (options.roc_app_dylib_path) |roc_app_dylib_path| {
-                        exe.addObjectFile(.{ .path = roc_app_dylib_path });
-                    }
+                    // if (options.roc_app_dylib_path) |roc_app_dylib_path| {
+                    //     exe.addObjectFile(.{ .path = roc_app_dylib_path });
+                    // }
 
                     break :blk exe;
                 }
