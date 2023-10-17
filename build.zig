@@ -111,6 +111,7 @@ pub const App = struct {
             deps: ?[]const std.build.ModuleDependency = null,
             res_dirs: ?[]const []const u8 = null,
             watch_paths: ?[]const []const u8 = null,
+            roc_app_dylib_path: ?[]const u8 = null,
         },
     ) !App {
         const target = (try std.zig.system.NativeTargetInfo.detect(options.target)).target;
@@ -162,6 +163,10 @@ pub const App = struct {
                 if (target.os.tag == .linux) {
                     const gamemode_dep = b.dependency("mach_gamemode", .{});
                     exe.addModule("gamemode", gamemode_dep.module("mach-gamemode"));
+                }
+
+                if (options.roc_app_dylib_path) |roc_app_dylib_path| {
+                    exe.addObjectFile(.{ .path = roc_app_dylib_path });
                 }
 
                 break :blk exe;
